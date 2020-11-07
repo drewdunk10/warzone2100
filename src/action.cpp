@@ -153,6 +153,7 @@ const char *getDroidActionName(DROID_ACTION action)
 	return name[action];
 }
 
+
 // check if a target is within weapon range
 bool actionInRange(const DROID *psDroid, const BASE_OBJECT *psObj, int weapon_slot, bool useLongWithOptimum)
 {
@@ -212,6 +213,7 @@ bool actionInRange(const DROID *psDroid, const BASE_OBJECT *psObj, int weapon_sl
 
 	return false;
 }
+
 
 // check if a target is inside minimum weapon range
 static bool actionInsideMinRange(DROID *psDroid, BASE_OBJECT *psObj, WEAPON_STATS *psStats)
@@ -295,6 +297,7 @@ void actionAlignTurret(BASE_OBJECT *psObj, int weapon_slot)
 	}
 }
 
+
 /* returns true if on target */
 bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *psWeapon)
 {
@@ -356,16 +359,7 @@ bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *
 	const int minRange = proj_GetMinRange(psWeapStats, psAttacker->player);
 	if (!bRepair && (unsigned)objPosDiffSq(psAttacker, psTarget) > minRange * minRange)
 	{
-		/* get target distance */
-		Vector3i delta = psTarget->pos - psAttacker->pos;
-		int32_t dxy = iHypot(delta.x, delta.y);
-		int32_t pitchLowerLimit, pitchUpperLimit;
-
-		//set upper and lower pitch limits depending on weapon stats of attacker
-		setPitchLimits(psAttacker, psWeapStats, psWeapon, &pitchLowerLimit, &pitchUpperLimit);
-
-		uint16_t targetPitch = iAtan2(delta.z, dxy);
-		targetPitch = (uint16_t)clip(angleDelta(targetPitch), pitchLowerLimit, pitchUpperLimit);  // Cast wrapping intended.
+		uint16_t targetPitch = getTargetPitch(psAttacker, psTarget->pos, psWeapStats, psWeapon);
 		int pitchError = angleDelta(targetPitch - tPitch);
 
 		tPitch += clip(pitchError, -pitchRate, pitchRate);  // Addition wrapping intended.
@@ -379,18 +373,19 @@ bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *
 }
 
 
-// set the pitch limits based on the weapon stats of the attacker
-void setPitchLimits(BASE_OBJECT *psAttacker, WEAPON_STATS *psWeapStats, WEAPON *psWeapon, int32_t *pitchLowerLimit, int32_t *pitchUpperLimit)
+/* get the target pitch based on weapon stats of the attacker and target distance */
+uint16_t getTargetPitch(BASE_OBJECT *psAttacker, Vector3i targetPos, WEAPON_STATS *psWeapStats, WEAPON *psWeapon)
 {
-	*pitchLowerLimit = *pitchUpperLimit = 0;
+	int32_t pitchLowerLimit = 0;
+	int32_t pitchUpperLimit = 0;
 	Vector3i attackerMuzzlePos = psAttacker->pos;  // Using for calculating the pitch, but not the direction, in case using the exact direction causes bugs somewhere.
 	if (psAttacker->type == OBJ_STRUCTURE)
 	{
 		STRUCTURE *psStructure = (STRUCTURE *)psAttacker;
 		int weapon_slot = psWeapon - psStructure->asWeaps;  // Should probably be passed weapon_slot instead of psWeapon.
 		calcStructureMuzzleLocation(psStructure, &attackerMuzzlePos, weapon_slot);
-		*pitchLowerLimit = DEG(psWeapStats->minElevation);
-		*pitchUpperLimit = DEG(psWeapStats->maxElevation);
+		pitchLowerLimit = DEG(psWeapStats->minElevation);
+		pitchUpperLimit = DEG(psWeapStats->maxElevation);
 	}
 	else if (psAttacker->type == OBJ_DROID)
 	{
@@ -402,15 +397,21 @@ void setPitchLimits(BASE_OBJECT *psAttacker, WEAPON_STATS *psWeapStats, WEAPON *
 			|| psDroid->droidType == DROID_COMMAND || psDroid->droidType == DROID_CYBORG
 			|| psDroid->droidType == DROID_CYBORG_SUPER)
 		{
-			*pitchLowerLimit = DEG(psWeapStats->minElevation);
-			*pitchUpperLimit = DEG(psWeapStats->maxElevation);
+			pitchLowerLimit = DEG(psWeapStats->minElevation);
+			pitchUpperLimit = DEG(psWeapStats->maxElevation);
 		}
 		else if (psDroid->droidType == DROID_REPAIR)
 		{
-			*pitchLowerLimit = DEG(REPAIR_PITCH_LOWER);
-			*pitchUpperLimit = DEG(REPAIR_PITCH_UPPER);
+			pitchLowerLimit = DEG(REPAIR_PITCH_LOWER);
+			pitchUpperLimit = DEG(REPAIR_PITCH_UPPER);
 		}
 	}
+	Vector3i delta = targetPos - attackerMuzzlePos;  // Target distance
+	int32_t dxy = iHypot(delta.x, delta.y);
+	uint16_t targetPitch = iAtan2(delta.z, dxy);
+
+	// return calculated targetPitch using the limits
+	return (uint16_t)clip(angleDelta(targetPitch), pitchLowerLimit, pitchUpperLimit);
 }
 
 
@@ -430,6 +431,7 @@ bool actionVisibleTarget(DROID *psDroid, BASE_OBJECT *psTarget, int weapon_slot)
 	return (orderState(psDroid, DORDER_FIRESUPPORT)	|| visibleObject(psDroid, psTarget, false) > UBYTE_MAX / 2)
 	       && lineOfFire(psDroid, psTarget, weapon_slot, true);
 }
+
 
 static void actionAddVtolAttackRun(DROID *psDroid)
 {
@@ -469,6 +471,7 @@ static void actionAddVtolAttackRun(DROID *psDroid)
 	}
 }
 
+
 static void actionUpdateVtolAttack(DROID *psDroid)
 {
 	CHECK_DROID(psDroid);
@@ -492,6 +495,7 @@ static void actionUpdateVtolAttack(DROID *psDroid)
 		actionAddVtolAttackRun(psDroid);
 	}
 }
+
 
 static void actionUpdateTransporter(DROID *psDroid)
 {
@@ -653,6 +657,7 @@ void actionSanity(DROID *psDroid)
 		}
 	}
 }
+
 
 // Update the action state for a droid
 void actionUpdateDroid(DROID *psDroid)
@@ -2102,6 +2107,7 @@ void actionUpdateDroid(DROID *psDroid)
 	CHECK_DROID(psDroid);
 }
 
+
 /* Overall action function that is called by the specific action functions */
 static void actionDroidBase(DROID *psDroid, DROID_ACTION_DATA *psAction)
 {
@@ -2421,6 +2427,7 @@ void actionDroid(DROID *psDroid, DROID_ACTION action)
 	actionDroidBase(psDroid, &sAction);
 }
 
+
 /* Give a droid an action with a location target */
 void actionDroid(DROID *psDroid, DROID_ACTION action, UDWORD x, UDWORD y)
 {
@@ -2432,6 +2439,7 @@ void actionDroid(DROID *psDroid, DROID_ACTION action, UDWORD x, UDWORD y)
 	sAction.y = y;
 	actionDroidBase(psDroid, &sAction);
 }
+
 
 /* Give a droid an action with an object target */
 void actionDroid(DROID *psDroid, DROID_ACTION action, BASE_OBJECT *psObj)
@@ -2445,6 +2453,7 @@ void actionDroid(DROID *psDroid, DROID_ACTION action, BASE_OBJECT *psObj)
 	sAction.y = psObj->pos.y;
 	actionDroidBase(psDroid, &sAction);
 }
+
 
 /* Give a droid an action with an object target and a location */
 void actionDroid(DROID *psDroid, DROID_ACTION action,
@@ -2529,6 +2538,7 @@ static bool vtolLandingTile(SDWORD x, SDWORD y)
 	return true;
 }
 
+
 /**
  * Performs a space-filling spiral-like search from startX,startY up to (and
  * including) radius. For each tile, the search function is called; if it
@@ -2594,6 +2604,7 @@ static bool spiralSearch(int startX, int startY, int max_radius, tileMatchFuncti
 	return false;
 }
 
+
 /**
  * an internal tileMatchFunction that checks if x and y are coordinates of a
  * valid landing place.
@@ -2615,6 +2626,7 @@ static bool vtolLandingTileSearchFunction(int x, int y, void *matchState)
 
 	return false;
 }
+
 
 // Choose a landing position for a VTOL when it goes to rearm that is close to rearm
 // pad but not on it, since it may be busy by the time we get there.
