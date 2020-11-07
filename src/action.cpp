@@ -302,7 +302,6 @@ bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *
 	uint16_t tRotation, tPitch;
 	uint16_t targetRotation;
 	int32_t  rotationTolerance = 0;
-	int32_t  pitchLowerLimit, pitchUpperLimit;
 
 	if (!psTarget)
 	{
@@ -326,37 +325,6 @@ bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *
 
 	tRotation = psWeapon->rot.direction;
 	tPitch = psWeapon->rot.pitch;
-
-	//set the pitch limits based on the weapon stats of the attacker
-	pitchLowerLimit = pitchUpperLimit = 0;
-	Vector3i attackerMuzzlePos = psAttacker->pos;  // Using for calculating the pitch, but not the direction, in case using the exact direction causes bugs somewhere.
-	if (psAttacker->type == OBJ_STRUCTURE)
-	{
-		STRUCTURE *psStructure = (STRUCTURE *)psAttacker;
-		int weapon_slot = psWeapon - psStructure->asWeaps;  // Should probably be passed weapon_slot instead of psWeapon.
-		calcStructureMuzzleLocation(psStructure, &attackerMuzzlePos, weapon_slot);
-		pitchLowerLimit = DEG(psWeapStats->minElevation);
-		pitchUpperLimit = DEG(psWeapStats->maxElevation);
-	}
-	else if (psAttacker->type == OBJ_DROID)
-	{
-		DROID *psDroid = (DROID *)psAttacker;
-		int weapon_slot = psWeapon - psDroid->asWeaps;  // Should probably be passed weapon_slot instead of psWeapon.
-		calcDroidMuzzleLocation(psDroid, &attackerMuzzlePos, weapon_slot);
-
-		if (psDroid->droidType == DROID_WEAPON || isTransporter(psDroid)
-		    || psDroid->droidType == DROID_COMMAND || psDroid->droidType == DROID_CYBORG
-		    || psDroid->droidType == DROID_CYBORG_SUPER)
-		{
-			pitchLowerLimit = DEG(psWeapStats->minElevation);
-			pitchUpperLimit = DEG(psWeapStats->maxElevation);
-		}
-		else if (psDroid->droidType == DROID_REPAIR)
-		{
-			pitchLowerLimit = DEG(REPAIR_PITCH_LOWER);
-			pitchUpperLimit = DEG(REPAIR_PITCH_UPPER);
-		}
-	}
 
 	//get the maximum rotation this frame
 	rotRate = gameTimeAdjustedIncrement(rotRate);
@@ -389,8 +357,12 @@ bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *
 	if (!bRepair && (unsigned)objPosDiffSq(psAttacker, psTarget) > minRange * minRange)
 	{
 		/* get target distance */
-		Vector3i delta = psTarget->pos - attackerMuzzlePos;
+		Vector3i delta = psTarget->pos - psAttacker->pos;
 		int32_t dxy = iHypot(delta.x, delta.y);
+		int32_t pitchLowerLimit, pitchUpperLimit;
+
+		//set upper and lower pitch limits depending on weapon stats of attacker
+		setPitchLimits(psAttacker, psWeapStats, psWeapon, &pitchLowerLimit, &pitchUpperLimit);
 
 		uint16_t targetPitch = iAtan2(delta.z, dxy);
 		targetPitch = (uint16_t)clip(angleDelta(targetPitch), pitchLowerLimit, pitchUpperLimit);  // Cast wrapping intended.
@@ -404,6 +376,41 @@ bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *
 	psWeapon->rot.pitch = tPitch;
 
 	return onTarget;
+}
+
+
+// set the pitch limits based on the weapon stats of the attacker
+void setPitchLimits(BASE_OBJECT *psAttacker, WEAPON_STATS *psWeapStats, WEAPON *psWeapon, int32_t *pitchLowerLimit, int32_t *pitchUpperLimit)
+{
+	*pitchLowerLimit = *pitchUpperLimit = 0;
+	Vector3i attackerMuzzlePos = psAttacker->pos;  // Using for calculating the pitch, but not the direction, in case using the exact direction causes bugs somewhere.
+	if (psAttacker->type == OBJ_STRUCTURE)
+	{
+		STRUCTURE *psStructure = (STRUCTURE *)psAttacker;
+		int weapon_slot = psWeapon - psStructure->asWeaps;  // Should probably be passed weapon_slot instead of psWeapon.
+		calcStructureMuzzleLocation(psStructure, &attackerMuzzlePos, weapon_slot);
+		*pitchLowerLimit = DEG(psWeapStats->minElevation);
+		*pitchUpperLimit = DEG(psWeapStats->maxElevation);
+	}
+	else if (psAttacker->type == OBJ_DROID)
+	{
+		DROID *psDroid = (DROID *)psAttacker;
+		int weapon_slot = psWeapon - psDroid->asWeaps;  // Should probably be passed weapon_slot instead of psWeapon.
+		calcDroidMuzzleLocation(psDroid, &attackerMuzzlePos, weapon_slot);
+
+		if (psDroid->droidType == DROID_WEAPON || isTransporter(psDroid)
+			|| psDroid->droidType == DROID_COMMAND || psDroid->droidType == DROID_CYBORG
+			|| psDroid->droidType == DROID_CYBORG_SUPER)
+		{
+			*pitchLowerLimit = DEG(psWeapStats->minElevation);
+			*pitchUpperLimit = DEG(psWeapStats->maxElevation);
+		}
+		else if (psDroid->droidType == DROID_REPAIR)
+		{
+			*pitchLowerLimit = DEG(REPAIR_PITCH_LOWER);
+			*pitchUpperLimit = DEG(REPAIR_PITCH_UPPER);
+		}
+	}
 }
 
 

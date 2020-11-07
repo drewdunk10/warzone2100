@@ -83,6 +83,9 @@ void actionDroid(DROID *psDroid, DROID_ACTION action,
 /** Rotate turret toward  target return True if locked on (Droid and Structure). */
 bool actionTargetTurret(BASE_OBJECT *psAttacker, BASE_OBJECT *psTarget, WEAPON *psWeapon);
 
+/** Set the upper and lower pitch limits of attacker based on weapon stats. */
+void setPitchLimits(BASE_OBJECT *psAttacker, WEAPON_STATS *psWeapStats, WEAPON *psWeapon, int32_t *pitchLowerLimit, int32_t *pitchUpperLimit);
+
 /** Realign turret. */
 void actionAlignTurret(BASE_OBJECT *psObj, int weapon_slot);
 
